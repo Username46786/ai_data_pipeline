@@ -134,46 +134,6 @@ def _inject_styles() -> None:
                 font-size: 0.9rem;
                 line-height: 1.45;
             }
-            .step-flow {
-                display: flex;
-                flex-direction: column;
-                gap: 0.7rem;
-                margin-top: 0.2rem;
-            }
-            .step-row {
-                display: flex;
-                align-items: flex-start;
-                gap: 0.8rem;
-                padding: 0.8rem 0.85rem;
-                border-radius: 16px;
-                background: #ffffff;
-                border: 1px solid rgba(148, 163, 184, 0.18);
-            }
-            .step-index {
-                width: 30px;
-                height: 30px;
-                border-radius: 999px;
-                background: #0f766e;
-                color: #ffffff;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 0.82rem;
-                font-weight: 700;
-                flex: 0 0 auto;
-                margin-top: 0.05rem;
-            }
-            .step-name {
-                color: #0f172a;
-                font-size: 0.95rem;
-                font-weight: 700;
-            }
-            .step-description {
-                color: #475569;
-                font-size: 0.87rem;
-                margin-top: 0.15rem;
-                line-height: 1.4;
-            }
             .log-box {
                 background: #0f172a;
                 color: #e2e8f0;
@@ -221,6 +181,19 @@ def _render_issue_card(label: str, value: str, subtitle: str) -> None:
     )
 
 
+def _render_kpi_card(label: str, value: str, subtitle: str) -> None:
+    st.markdown(
+        f"""
+        <div class="status-card">
+            <div class="metric-label">{label}</div>
+            <div class="metric-value" style="font-size:1.45rem;">{value}</div>
+            <div class="metric-sub">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _render_log(log_entries: list[str]) -> None:
     if not log_entries:
         st.info("Run the pipeline to generate a transformation log.")
@@ -261,23 +234,16 @@ def _render_pipeline_flow(selected_steps: list[str], step_options: dict) -> None
         "sort_rows": "Orders the final dataset for easier review and export.",
     }
 
-    rows = []
     for index, step in enumerate(selected_steps, start=1):
         if step not in step_options:
             continue
-        rows.append(
-            f"""
-            <div class="step-row">
-                <div class="step-index">{index}</div>
-                <div>
-                    <div class="step-name">{step_options[step]["label"]}</div>
-                    <div class="step-description">{descriptions.get(step, "Pipeline step")}</div>
-                </div>
-            </div>
-            """
-        )
-
-    st.markdown(f'<div class="step-flow">{"".join(rows)}</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            number_col, content_col = st.columns([0.16, 0.84], vertical_alignment="top")
+            with number_col:
+                st.markdown(f"### {index}")
+            with content_col:
+                st.markdown(f"**{step_options[step]['label']}**")
+                st.caption(descriptions.get(step, "Pipeline step"))
 
 
 def _default_step_params(step_options: dict) -> dict:
@@ -341,24 +307,54 @@ def _render_issue_summary_cards(profile: dict) -> None:
         )
 
 
-def _render_suggested_pipeline(suggested_steps: list[str], step_options: dict) -> None:
+def _suggestion_reason(step: str, profile: dict) -> str:
+    if step == "standardize_column_names":
+        count = len(profile.get("column_name_issues", []))
+        return f"Recommended because {count} column names look inconsistent."
+    if step == "trim_whitespace":
+        return f"Recommended because {profile['blank_string_total']:,} blank or whitespace-only text values were detected."
+    if step == "remove_duplicates":
+        return f"Recommended because {profile['duplicate_rows']:,} duplicate rows were found."
+    if step == "fill_missing_numeric":
+        return "Recommended because numeric columns contain missing values that can be filled consistently."
+    if step == "fill_missing_text":
+        return "Recommended because text columns contain missing or blank values."
+    if step == "parse_date_columns":
+        columns = ", ".join(profile["likely_date_columns"][:3])
+        return f"Recommended because likely date columns were detected{': ' + columns if columns else '.'}"
+    if step == "filter_rows":
+        return "Optional step for narrowing the dataset to specific records."
+    if step == "sort_rows":
+        return "Optional step for organizing the final dataset before export."
+    return "Recommended based on the detected data quality profile."
+
+
+def _render_suggested_pipeline(suggested_steps: list[str], step_options: dict, profile: dict) -> None:
     if not suggested_steps:
         st.info("No suggested steps were generated for this dataset.")
         return
 
     labels = [step_options[step]["label"] for step in suggested_steps if step in step_options]
+    reason_lines = []
+    for step in suggested_steps:
+        if step in step_options:
+            reason_lines.append(
+                f"- **{step_options[step]['label']}**: {_suggestion_reason(step, profile)}"
+            )
     st.markdown(
         f"""
         <div class="suggestion-banner">
-            <div class="suggestion-title">Suggested pipeline</div>
+            <div class="suggestion-title">Recommended Cleanup Pipeline</div>
             <div class="suggestion-copy">
-                Based on the detected issues, the app recommends this cleanup path:
+                Based on the issues detected in this dataset, the app recommends the following cleanup sequence to improve consistency and readiness for analysis:
                 <strong>{" -> ".join(labels)}</strong>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    for line in reason_lines:
+        st.markdown(line)
 
 
 def _render_column_findings(profile: dict) -> None:
@@ -442,6 +438,9 @@ def main() -> None:
         <div class="hero-card">
             <div class="eyebrow">Deterministic Data Cleanup</div>
             <div class="hero-title">AI Data Pipeline Builder</div>
+            <div class="subtle-text" style="margin-top:0.55rem;max-width:760px;font-size:1rem;font-weight:600;color:#0f172a;">
+                Upload a CSV, clean it with a guided pipeline, and download a ready-to-use dataset.
+            </div>
             <div class="subtle-text" style="margin-top:0.75rem;max-width:760px;">
                 Upload a CSV or use the bundled sample dataset, review rule-based quality checks, run a simple cleanup pipeline, and download a cleaned result.
             </div>
@@ -533,15 +532,27 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-        _render_suggested_pipeline(suggested_steps, step_options)
+        _render_suggested_pipeline(suggested_steps, step_options, profile)
 
-        if st.button("Suggest Pipeline", type="primary", width="stretch"):
-            pipeline_state["selected_steps"] = suggested_steps
-            defaults = _default_step_params(step_options)
-            for step_name in suggested_steps:
-                pipeline_state["configured_steps"][step_name] = defaults.get(step_name, {})
-            pipeline_state["has_run"] = False
-            pipeline_state["pipeline_error"] = None
+        action_cols = st.columns(2)
+        with action_cols[0]:
+            if st.button("Suggest Pipeline", type="primary", width="stretch"):
+                pipeline_state["selected_steps"] = suggested_steps
+                defaults = _default_step_params(step_options)
+                for step_name in suggested_steps:
+                    pipeline_state["configured_steps"][step_name] = defaults.get(step_name, {})
+                pipeline_state["has_run"] = False
+                pipeline_state["pipeline_error"] = None
+        with action_cols[1]:
+            if st.button("Reset Pipeline", width="stretch"):
+                pipeline_state["selected_steps"] = []
+                pipeline_state["configured_steps"] = _default_step_params(step_options)
+                pipeline_state["has_run"] = False
+                pipeline_state["cleaned_df"] = df.copy()
+                pipeline_state["log_entries"] = []
+                pipeline_state["before_row_count"] = len(df)
+                pipeline_state["after_row_count"] = len(df)
+                pipeline_state["pipeline_error"] = None
 
         selected_steps = st.multiselect(
             "Selected cleanup steps",
@@ -597,6 +608,11 @@ def main() -> None:
 
     st.markdown("")
     if pipeline_state["has_run"]:
+        cleaned_profile = profile_dataframe(cleaned_df)
+        rows_removed = pipeline_state["before_row_count"] - pipeline_state["after_row_count"]
+        missing_reduction = profile["missing_total"] - cleaned_profile["missing_total"]
+        duplicates_removed = profile["duplicate_rows"] - cleaned_profile["duplicate_rows"]
+
         st.markdown(
             f"""
             <div class="status-strip">
@@ -606,6 +622,26 @@ def main() -> None:
             """,
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="section-title">Cleanup Impact</div>', unsafe_allow_html=True)
+        kpi_cols = st.columns(3)
+        with kpi_cols[0]:
+            _render_kpi_card(
+                "Row Count Change",
+                f"{pipeline_state['before_row_count']:,} -> {pipeline_state['after_row_count']:,}",
+                f"{rows_removed:,} rows removed",
+            )
+        with kpi_cols[1]:
+            _render_kpi_card(
+                "Missing Values",
+                f"{profile['missing_total']:,} -> {cleaned_profile['missing_total']:,}",
+                f"{missing_reduction:,} fewer missing values",
+            )
+        with kpi_cols[2]:
+            _render_kpi_card(
+                "Duplicate Rows",
+                f"{profile['duplicate_rows']:,} -> {cleaned_profile['duplicate_rows']:,}",
+                f"{duplicates_removed:,} duplicates removed",
+            )
     else:
         st.info("Nothing has been transformed yet. Review the selected steps, then click `Run Pipeline`.")
 
