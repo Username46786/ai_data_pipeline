@@ -6,6 +6,10 @@ AI Data Pipeline Builder is a polished Streamlit app that helps users turn messy
 
 This project is intentionally designed to be simple, reliable, and demo-ready. It uses only pandas for profiling and transformations, with rule-based suggestions instead of freeform or LLM-generated actions.
 
+## Demo Link
+
+https://ai-data-pipeline-osgq.onrender.com
+
 ## Target User
 
 This app is built for:
